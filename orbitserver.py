@@ -11,6 +11,7 @@ import json
 import pandas as pd
 import numpy as np
 
+
 def meanmotion_to_semimajoraxis(mm, mu):
     return mu**(1/3)/((mm*2*np.pi/84600)**(2/3))
 
@@ -42,13 +43,23 @@ def find_nodes(orbit0, orbit1,direction=1):
     x, y, z = r*np.cos(ta), r*np.sin(ta), 0  
     return x, y, z
 
+# Set up global constants
+Earth_mu = 3.986004418e14
+debris_data = pd.read_csv("https://celestrak.org/NORAD/elements/gp.php?GROUP=1982-092&FORMAT=csv")
+debris_data["a"] = meanmotion_to_semimajoraxis(debris_data["MEAN_MOTION"], Earth_mu)
+
 
 class MainHandler(RequestHandler):
     def get(self):
-        global debris_data
+        global debris_data, Earth_mu
         # Get the orbital elements
         params = {}
-        for param in ["a", "e", "i", "raan", "aop", "ta"]:
+        if self.get_argument("mm", None) != None:
+            paramset = ["mm", "e", "i", "raan", "aop", "ma"]
+            params["a"] = meanmotion_to_semimajoraxis(float(self.get_argument("mm")), Earth_mu)
+        else:
+            paramset = ["a", "e", "i", "raan", "aop", "ta"]
+        for param in paramset:
             argument = self.get_argument(param, None)
             if argument == None:
                 self.set_status(422)
@@ -85,12 +96,12 @@ class MainHandler(RequestHandler):
         self.write(json.dumps(result))
 
 
-if __name__ == "__main__":
-    Earth_mu = 3.986004418e14
-    debris_data = pd.read_csv("https://celestrak.org/NORAD/elements/gp.php?GROUP=1982-092&FORMAT=csv")
-    debris_data["a"] = meanmotion_to_semimajoraxis(debris_data["MEAN_MOTION"], Earth_mu)
-    app = Application([
+def make_app():
+    return Application([
         (r"/", MainHandler),
     ])
+
+if __name__ == "__main__":
+    app = make_app()
     app.listen(8888)
     tornado.ioloop.IOLoop.current().start()
