@@ -58,23 +58,20 @@ class MainHandler(RequestHandler):
         params["INCLINATION"] = params["i"]
         params["ECCENTRICITY"] = params["e"]
         params["ARG_OF_PERICENTER"] = params["aop"]
-        for _, row in debris_data.iterrows():
+        dists = []
+        for n, row in debris_data.iterrows():
                 nodes = []
                 for direction in [-1,1]:
                     x,y,z = find_nodes(row, params, direction)
-                    nodes.append([x,y,z])
+                    nodes.append(np.array([x,y,z]))
                     x,y,z = find_nodes(params, row, direction)
-                    nodes.append([x,y,z])
+                    nodes.append(np.array([x,y,z]))
                 # find the closest nodes
-                mindist = 1e12
-                for n0 in nodes:
-                    for n1 in nodes:
-                        if n0 == n1:
-                            continue
-                        dist = np.linalg.norm(np.array(n0)-np.array(n1))
-                        if dist<mindist:
-                            mindist = dist
-                debris_data["dist"] = mindist
+                dists.append(np.min([np.linalg.norm(nodes[0]-nodes[1]),
+                            np.linalg.norm(nodes[2]-nodes[3]),
+                            np.linalg.norm(nodes[0]-nodes[3]),
+                            np.linalg.norm(nodes[1]-nodes[2])]))  
+        debris_data["dist"] = dists                              
         sorted_data = debris_data.sort_values(by="dist")
         result = {}
         for n, row in sorted_data[:5].iterrows():
