@@ -10,6 +10,7 @@ from tornado.web import RequestHandler, Application
 import json
 import pandas as pd
 import numpy as np
+import requests
 
 
 def meanmotion_to_semimajoraxis(mm, mu):
@@ -48,6 +49,12 @@ Earth_mu = 3.986004418e14
 debris_data = pd.read_csv("https://celestrak.org/NORAD/elements/gp.php?GROUP=1982-092&FORMAT=csv")
 debris_data["a"] = meanmotion_to_semimajoraxis(debris_data["MEAN_MOTION"], Earth_mu)
 
+response = requests.get("https://celestrak.org/NORAD/elements/gp.php?GROUP=1982-092&FORMAT=tle")
+debris_TLE = response.text.split("\r\n")
+# Group TLEs into tuples of 3
+debris_TLE = [(debris_TLE[i], debris_TLE[i+1], debris_TLE[i+2]) for i in range(0, len(debris_TLE)-3, 3)]
+
+debris_data["TLE"] = debris_TLE
 
 class MainHandler(RequestHandler):
     def get(self):
@@ -86,7 +93,7 @@ class MainHandler(RequestHandler):
         sorted_data = debris_data.sort_values(by="dist")
         result = {}
         for n, row in sorted_data[:5].iterrows():
-            result[n] = {"semimajoraxis": meanmotion_to_semimajoraxis(row["MEAN_MOTION"], Earth_mu),
+            result = {"semimajoraxis": meanmotion_to_semimajoraxis(row["MEAN_MOTION"], Earth_mu),
                             "eccentricity": row["ECCENTRICITY"],
                             "inclination": row["INCLINATION"],
                             "raan": row["RA_OF_ASC_NODE"],
@@ -96,9 +103,51 @@ class MainHandler(RequestHandler):
         self.write(json.dumps(result))
 
 
+class TLEHandler(RequestHandler):
+    def get(self):
+        global debris_data, Earth_mu
+        # Get the orbital elements
+        params = {}
+        paramset = ["mm", "e", "i", "raan", "aop", "ma"]
+        for param in paramset:
+            argument = self.get_argument(param, None)
+            if argument == None:
+                self.set_status(422)
+                self.write(json.dumps({"error": "Missing orbital elements"}))
+                return
+            params[param] = float(argument)
+        params["a"] = meanmotion_to_semimajoraxis(float(self.get_argument("mm")), Earth_mu)
+        params["INCLINATION"] = params["i"]
+        params["ECCENTRICITY"] = params["e"]
+        params["ARG_OF_PERICENTER"] = params["aop"]
+        dists = []
+        for n, row in debris_data.iterrows():
+                nodes = []
+                for direction in [-1,1]:
+                    x,y,z = find_nodes(row, params, direction)
+                    nodes.append(np.array([x,y,z]))
+                    x,y,z = find_nodes(params, row, direction)
+                    nodes.append(np.array([x,y,z]))
+                # find the closest nodes
+                dists.append(np.min([np.linalg.norm(nodes[0]-nodes[1]),
+                            np.linalg.norm(nodes[2]-nodes[3]),
+                            np.linalg.norm(nodes[0]-nodes[3]),
+                            np.linalg.norm(nodes[1]-nodes[2])]))  
+        debris_data["dist"] = dists                              
+        sorted_data = debris_data.sort_values(by="dist")
+        result = ""
+        for n, row in sorted_data[:5].iterrows():
+            result += row["TLE"][0] + "\n" + row["TLE"][1] + "\n" + row["TLE"][2] + "\n"
+        # set response format as text
+        self.set_header("Content-Type", 'text/plain')
+        self.set_status(200)
+        self.write(result)
+
+
 def make_app():
     return Application([
         (r"/", MainHandler),
+        (r"/tle", TLEHandler)
     ])
 
 if __name__ == "__main__":
