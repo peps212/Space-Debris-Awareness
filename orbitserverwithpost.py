@@ -3,6 +3,10 @@
 '''
     Space debris REST API
     OrionHack 29/07/2023
+
+    curl for testing post:
+
+    curl -X POST -d "xvelocityobject=1.23&yvelocityobject=4.56&zvelocityobject=7.89&xpositionobject=10.11&ypositionobject=12.13&zpositionobject=14.15&xvelocitysatellite=16.17&yvelocitysatellite=18.19&zvelocitysatellite=20.21&xpositionsatellite=22.23&ypositionsatellite=24.25&zpositionsatellite=26.27" http://localhost:8888
 '''
 
 import tornado.ioloop
@@ -111,11 +115,11 @@ class MainHandler(RequestHandler):
         postdata_ypositionsatellite = float(self.get_argument('ypositionsatellite'))
         postdata_zpositionsatellite = float(self.get_argument('zpositionsatellite'))
 
-        positionobjectrelativetoearth = [postdata_xpositionobject + postdata_xpositionsatellite ,postdata_ypositionobject + postdata_ypositionsatellite ,postdata_zpositionobject + postdata_zpositionsatellite]
-        velocityobjectrelativetoearth = [postdata_xvelocityobject + postdata_xvelocitysatellite,postdata_yvelocityobject + postdata_yvelocitysatellite,postdata_zvelocityobject + postdata_zvelocitysatellite]
+        positionobjectrelativetoearth = np.array([postdata_xpositionobject + postdata_xpositionsatellite ,postdata_ypositionobject + postdata_ypositionsatellite ,postdata_zpositionobject + postdata_zpositionsatellite])
+        velocityobjectrelativetoearth = np.array([postdata_xvelocityobject + postdata_xvelocitysatellite,postdata_yvelocityobject + postdata_yvelocitysatellite,postdata_zvelocityobject + postdata_zvelocitysatellite])
         
-        
-      
+
+
 
 
 
@@ -133,7 +137,7 @@ class MainHandler(RequestHandler):
 
         CREATE TABLE IF NOT EXISTS spacejunk(
 
-            id INTEGER identifier,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             a REAL, 
             i REAL,
             e REAL,
@@ -152,15 +156,23 @@ class MainHandler(RequestHandler):
         velocitystr = ((velocityobjectrelativetoearth[0])*(velocityobjectrelativetoearth[0]) + (velocityobjectrelativetoearth[1])*(velocityobjectrelativetoearth[1]) + (velocityobjectrelativetoearth[2])*(velocityobjectrelativetoearth[2]))**(1/2)
         #finding specific orbital energy from velocity 
 
-        #specangmom = ()
+        h = np.cross_product(positionobjectrelativetoearth,velocityobjectrelativetoearth)
+        ske = (velocitystr**(2)/2) - (Earth_mu/posstr)
+        hnorm = np.linalg.norm(h)
+        a = -(Earth_mu/(2*ske))
+        eccentr = np.sqrt((1 + (2*ske*np.square(hnorm))/np.square(Earth_mu)))
+        inclinationi = np.arccos(h[2]/hnorm)
+        rightascension = np.atan2(h[0],-h[1])
+        evec = (eccentr*h)/np.linalg.norm(h)
+        argofper = np.atan2(np.dot(h,evec),(hnorm * eccentr*np.sin(inclinationi)))
 
+        insertintoquery = "INSERT INTO spacejunk(a,i,e,raan,aop,ta) data(?,?,?,?,?,?)"
 
+        spacejunkcursor.execute(insertintoquery,(a,inclinationi,eccentr,rightascension,argofper))
 
-        #debris_sma
-        #debris_ecc
-        #debris_argper
-        #debris_
+        spacejunkdatabaseconn.close()
 
+        self.set_status(200)
 
 
 
