@@ -156,23 +156,26 @@ class MainHandler(RequestHandler):
         velocitystr = ((velocityobjectrelativetoearth[0])*(velocityobjectrelativetoearth[0]) + (velocityobjectrelativetoearth[1])*(velocityobjectrelativetoearth[1]) + (velocityobjectrelativetoearth[2])*(velocityobjectrelativetoearth[2]))**(1/2)
         #finding specific orbital energy from velocity 
 
-        h = np.cross_product(positionobjectrelativetoearth,velocityobjectrelativetoearth)
+        h = np.cross(positionobjectrelativetoearth,velocityobjectrelativetoearth)
         ske = (velocitystr**(2)/2) - (Earth_mu/posstr)
         hnorm = np.linalg.norm(h)
         a = -(Earth_mu/(2*ske))
         eccentr = np.sqrt((1 + (2*ske*np.square(hnorm))/np.square(Earth_mu)))
         inclinationi = np.arccos(h[2]/hnorm)
-        rightascension = np.atan2(h[0],-h[1])
+        rightascension = np.arctan2(h[0],-h[1])
         evec = (eccentr*h)/np.linalg.norm(h)
-        argofper = np.atan2(np.dot(h,evec),(hnorm * eccentr*np.sin(inclinationi)))
+        argofper = np.arctan2(np.dot(h,evec),(hnorm * eccentr*np.sin(inclinationi)))
 
-        insertintoquery = "INSERT INTO spacejunk(a,i,e,raan,aop,ta) data(?,?,?,?,?,?)"
+        insertintoquery = "INSERT INTO spacejunk(a,i,e,raan,aop) VALUES(?,?,?,?,?)"
 
         spacejunkcursor.execute(insertintoquery,(a,inclinationi,eccentr,rightascension,argofper))
 
         spacejunkdatabaseconn.close()
 
-        self.set_status(200)
+        self.set_header("Content-Type","text/plain")
+        self.write("Succesfully updated database of known space junk!")
+        self.finish()
+
 
 
 
